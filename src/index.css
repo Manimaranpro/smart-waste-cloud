@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #fdfcf9;
+    color: #3a4439;
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: 'Newsreader', Georgia, serif;
+  }
+}
+
+/* Custom Natural Tones styling helpers */
+.bg-natural-canvas { background-color: #fdfcf9; }
+.bg-natural-surface { background-color: #f2f0e4; }
+.bg-natural-sage { background-color: #5d7a5c; }
+.bg-natural-sage-dark { background-color: #4d664c; }
+.bg-natural-stone { background-color: #e5e1cc; }
+.border-natural { border-color: #d9d4c1; }
+.text-natural-dark { color: #2d3a2d; }
+.text-natural-muted { color: #7a8a7a; }
+.text-natural-body { color: #3a4439; }
+

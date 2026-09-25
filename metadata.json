@@ -1,0 +1,6 @@
+{
+  "name": "Smart Waste Monitoring System",
+  "description": "A full-stack cloud server-based Smart Waste Monitoring System with Citizen Reporting, Municipal Worker Dispatch, Admin Analytics Dashboard, AI Waste Classification, and real-time cloud data synchronization.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
