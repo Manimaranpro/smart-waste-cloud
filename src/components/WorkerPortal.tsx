@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Complaint, User, WorkerProfile } from '../types';
-import { HardHat, MapPin, CheckCircle, Clock, Truck, Camera, Navigation, AlertTriangle, Phone, Upload, Sparkles, ExternalLink, ShieldAlert, Route, ListTodo } from 'lucide-react';
+import { HardHat, MapPin, Camera, Navigation, Phone, Upload, Sparkles, Route, ListTodo, AlertCircle } from 'lucide-react';
 import { LanguageCode, TRANSLATIONS } from '../data/translations';
 import { RouteOptimizerView } from './RouteOptimizerView';
+import { compressImageFile } from '../utils/imageCompress';
 
 interface WorkerPortalProps {
   currentUser: User;
   workers: WorkerProfile[];
   complaints: Complaint[];
-  onUpdateStatus: (complaintId: string, status: Complaint['status'], cleanedImageUrl?: string, notes?: string) => void;
+  onUpdateStatus: (complaintId: string, status: Complaint['status'], cleanedImageUrl?: string, notes?: string) => Promise<void>;
   currentLang?: LanguageCode;
 }
 
@@ -19,17 +20,32 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
   onUpdateStatus,
   currentLang = 'en'
 }) => {
-  const currentWorker = workers.find((w) => w.userId === currentUser.id) || workers[0];
-  const assignedComplaints = complaints.filter((c) => c.workerId === currentUser.id || c.workerId === currentWorker?.userId);
+  const fallbackWorker: WorkerProfile = {
+    id: currentUser.id,
+    userId: currentUser.id,
+    name: currentUser.name,
+    email: currentUser.email,
+    phone: currentUser.phone || '',
+    ward: currentUser.ward || 'Ward 12 - Green Park',
+    status: 'active',
+    totalAssigned: 0,
+    totalResolved: 0,
+    rating: 5.0,
+    vehicleNo: 'MH-12-GW-COMPACTOR'
+  };
+  const currentWorker = workers.find((w) => w.userId === currentUser.id) || fallbackWorker;
+  const assignedComplaints = complaints.filter((c) => c.workerId === currentUser.id);
 
   // View switch: tasks cards vs route optimizer
   const [activeView, setActiveView] = useState<'tasks' | 'optimizer'>('tasks');
 
   const [filter, setFilter] = useState<'all' | 'assigned' | 'in_progress' | 'completed'>('all');
   const [selectedTask, setSelectedTask] = useState<Complaint | null>(null);
-  const [cleanedPhotoUrl, setCleanedPhotoUrl] = useState('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80');
+  const [cleanedPhotoUrl, setCleanedPhotoUrl] = useState('');
   const [workerNotes, setWorkerNotes] = useState('');
   const [newStatus, setNewStatus] = useState<Complaint['status']>('completed');
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Real-Time GPS Worker Location
   const [workerCoords, setWorkerCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -43,15 +59,16 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
           setIsGpsActive(true);
         },
         () => {
-          // Fallback municipal depot coordinate
-          setWorkerCoords({ lat: 18.5204, lng: 73.8567 });
-          setIsGpsActive(true);
+          const firstValid = assignedComplaints.find((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng) && !(c.lat === 20.5937 && c.lng === 78.9629));
+          setWorkerCoords(firstValid ? { lat: firstValid.lat, lng: firstValid.lng } : null);
+          setIsGpsActive(false);
         },
         { enableHighAccuracy: true }
       );
     } else {
-      setWorkerCoords({ lat: 18.5204, lng: 73.8567 });
-      setIsGpsActive(true);
+      const firstValid = assignedComplaints.find((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng) && !(c.lat === 20.5937 && c.lng === 78.9629));
+      setWorkerCoords(firstValid ? { lat: firstValid.lat, lng: firstValid.lng } : null);
+      setIsGpsActive(false);
     }
   };
 
@@ -59,7 +76,7 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
     refreshWorkerGps();
   }, []);
 
-  // Haversine formula to compute live field distance
+  // Haversine formula to compute live field distance (straight-line estimate)
   const getDistanceToComplaint = (targetLat: number, targetLng: number): { distanceStr: string; estMinutes: number } => {
     if (!workerCoords) return { distanceStr: 'Calculating...', estMinutes: 5 };
     const R = 6371; // km
@@ -76,9 +93,9 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
 
     if (distanceKm < 1) {
       const meters = Math.round(distanceKm * 1000);
-      return { distanceStr: `${meters}m away`, estMinutes: Math.max(1, Math.round(meters / 250)) };
+      return { distanceStr: `~${meters}m away`, estMinutes: Math.max(1, Math.round(meters / 250)) };
     }
-    return { distanceStr: `${distanceKm.toFixed(1)} km away`, estMinutes: Math.max(2, Math.round(distanceKm * 3)) };
+    return { distanceStr: `~${distanceKm.toFixed(1)} km away`, estMinutes: Math.max(2, Math.round(distanceKm * 3)) };
   };
 
   const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
@@ -94,8 +111,9 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
   const handleOpenUpdateModal = (task: Complaint) => {
     setSelectedTask(task);
     setWorkerNotes(task.workerNotes || '');
-    setCleanedPhotoUrl(task.cleanedImageUrl || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80');
+    setCleanedPhotoUrl(task.cleanedImageUrl || '');
     setNewStatus(task.status === 'assigned' ? 'in_progress' : 'completed');
+    setUpdateError(null);
   };
 
   const handleGeotagResolution = () => {
@@ -106,29 +124,43 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
           setWorkerNotes((prev) => stamp + prev);
         },
         () => {
-          const stamp = `[GPS Verified On-Site: 18.5204° N, 73.8567° E @ ${new Date().toLocaleTimeString()}] `;
-          setWorkerNotes((prev) => stamp + prev);
+          setUpdateError('Could not access GPS permission to stamp coordinates.');
         }
       );
     }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCleanedPhotoUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 1280, 0.8);
+        setCleanedPhotoUrl(compressed);
+        setUpdateError(null);
+      } catch (err: any) {
+        setUpdateError(err?.message || 'Failed to load uploaded cleanup photo.');
+      }
     }
   };
 
-  const handleUpdateSubmit = (e: React.FormEvent) => {
+  const handleUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedTask) {
-      onUpdateStatus(selectedTask.id, newStatus, cleanedPhotoUrl, workerNotes);
+    if (!selectedTask) return;
+    setUpdateError(null);
+
+    if (newStatus === 'completed' && !cleanedPhotoUrl) {
+      setUpdateError('Please upload an after-cleanup proof photograph before marking this job completed.');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      await onUpdateStatus(selectedTask.id, newStatus, cleanedPhotoUrl || undefined, workerNotes);
       setSelectedTask(null);
+    } catch (err: any) {
+      setUpdateError(err?.message || 'Failed to save cleanup update to database. Please retry.');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -247,7 +279,7 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
           <Route className="w-4 h-4 text-emerald-600" />
           <span>Multi-Stop Route Optimizer (TSP 2-Opt)</span>
           <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-extrabold ml-1">
-            {complaints.filter(c => (c.workerId === currentUser.id || c.workerId === currentWorker.userId) && c.status !== 'completed' && c.status !== 'verified').length} Stops
+            {complaints.filter(c => c.workerId === currentUser.id && c.status !== 'completed' && c.status !== 'verified').length} Stops
           </span>
         </button>
       </div>
@@ -376,7 +408,11 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
                                 <span>TSP Tour</span>
                               </button>
                               <a
-                                href={`https://www.google.com/maps/dir/?api=1&destination=${task.lat},${task.lng}`}
+                                href={
+                                  !task.isLiveGpsVerified && task.lat === 20.5937 && task.lng === 78.9629 && task.address
+                                    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(task.address)}`
+                                    : `https://www.google.com/maps/dir/?api=1&destination=${task.lat},${task.lng}`
+                                }
                                 target="_blank"
                                 rel="noreferrer"
                                 className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2.5 py-1.5 rounded-full text-[10px] flex items-center gap-1 transition shadow-sm"
@@ -568,19 +604,30 @@ export const WorkerPortal: React.FC<WorkerPortalProps> = ({
                 />
               </div>
 
+              {updateError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{updateError}</span>
+                </div>
+              )}
+
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedTask(null)}
+                  onClick={() => {
+                    setSelectedTask(null);
+                    setUpdateError(null);
+                  }}
                   className="flex-1 bg-[#e5e1cc] text-[#2d3a2d] font-semibold py-2.5 rounded-full text-xs hover:bg-[#d9d4c1] transition cursor-pointer"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-[#5d7a5c] text-white font-bold py-2.5 rounded-full text-xs hover:bg-[#4d664c] shadow transition cursor-pointer"
+                  disabled={isUpdating}
+                  className="flex-1 bg-[#5d7a5c] text-white font-bold py-2.5 rounded-full text-xs hover:bg-[#4d664c] shadow transition cursor-pointer disabled:opacity-50"
                 >
-                  {t.submitProofBtn}
+                  {isUpdating ? 'Saving...' : t.submitProofBtn}
                 </button>
               </div>
             </form>

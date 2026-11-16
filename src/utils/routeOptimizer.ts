@@ -149,7 +149,11 @@ export function optimizeWorkerRoute(
   complaintsToVisit: Complaint[],
   strategy: OptimizationStrategy = 'shortest_distance'
 ): RouteOptimizationResult {
-  if (complaintsToVisit.length === 0) {
+  const validStops = complaintsToVisit.filter(
+    (c) => Number.isFinite(c.lat) && Number.isFinite(c.lng) && c.lat >= -90 && c.lat <= 90 && c.lng >= -180 && c.lng <= 180
+  );
+
+  if (validStops.length === 0 || !Number.isFinite(startLocation.lat) || !Number.isFinite(startLocation.lng)) {
     return {
       startLocation: { ...startLocation, label: startLocation.label || 'Worker Current Depot / GPS' },
       stops: [],
@@ -162,14 +166,14 @@ export function optimizeWorkerRoute(
       distanceSavedPercent: 0,
       co2SavedKg: 0,
       googleMapsMultiStopUrl: '',
-      algorithmUsed: 'tsp_2opt'
+      algorithmUsed: strategy === 'shortest_distance' ? 'tsp_2opt' : 'urgency_priority'
     };
   }
 
-  const baselineDistance = calculateTourDistance(startLocation.lat, startLocation.lng, complaintsToVisit);
+  const baselineDistance = calculateTourDistance(startLocation.lat, startLocation.lng, validStops);
 
   // Initial Nearest Neighbor Pass
-  const remaining = [...complaintsToVisit];
+  const remaining = [...validStops];
   const orderedTour: Complaint[] = [];
   let currentLat = startLocation.lat;
   let currentLng = startLocation.lng;

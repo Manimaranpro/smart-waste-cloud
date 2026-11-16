@@ -62,6 +62,7 @@ export interface Complaint {
   estimatedFillPercent?: number;
   gpsAccuracyMeters?: number;
   isLiveGpsVerified?: boolean;
+  binTag?: string;
   aiAnalysis?: {
     detectedType: string;
     hazardLevel: 'Safe' | 'Moderate' | 'Hazardous' | 'Critical';
@@ -72,6 +73,19 @@ export interface Complaint {
     recommendedEquipment: string;
     aiAnalysisNotes: string;
   };
+}
+
+export interface DumpsterBin {
+  binId: string;
+  ward: string;
+  address: string;
+  lat: number;
+  lng: number;
+  capacityLitres: number;
+  dumpsterType: string;
+  installedDate?: string;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 export interface WorkerProfile {
@@ -117,3 +131,4 @@ export interface FlaskSourceFile {
   description: string;
   content: string;
 }
+

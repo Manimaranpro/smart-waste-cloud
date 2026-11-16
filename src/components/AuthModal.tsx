@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { X, UserPlus, LogIn, Shield, HardHat, UserCheck, CheckCircle2, Lock, Mail, Camera, Image as ImageIcon } from 'lucide-react';
 import { LanguageCode, TRANSLATIONS } from '../data/translations';
+import { compressImageFile } from '../utils/imageCompress';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -33,34 +34,84 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
 
+  useEffect(() => {
+    if (isOpen) {
+      setMessage(null);
+      if (currentUser) {
+        setRole(currentUser.role || 'citizen');
+        setName(currentUser.name || '');
+        setPhone(currentUser.phone || '');
+        setWard(currentUser.ward || 'Ward 12 - Green Park');
+        setAvatarUrl(
+          currentUser.avatar ||
+            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80'
+        );
+      }
+    }
+  }, [isOpen, currentUser]);
+
   if (!isOpen) return null;
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setAvatarUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    try {
+      const compressed = await compressImageFile(file, 512, 0.82);
+      setAvatarUrl(compressed);
+      setMessage(null);
+    } catch (err: any) {
+      setMessage({ text: err?.message || 'Could not process profile photo. Please pick another image.', isError: true });
     }
   };
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
-    const updated: User = {
-      ...currentUser,
-      avatar: avatarUrl,
-      name: name || currentUser.name,
-      phone: phone || currentUser.phone,
-      ward: ward || currentUser.ward
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
+    const trimmedWard = ward.trim();
+    if (!trimmedName) {
+      setMessage({ text: 'Please enter your name before saving.', isError: true });
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+    const payload = {
+      userId: currentUser.id,
+      email: currentUser.email,
+      avatar: avatarUrl || currentUser.avatar,
+      name: trimmedName,
+      phone: trimmedPhone || currentUser.phone,
+      ward: trimmedWard || currentUser.ward
     };
-    onLoginSuccess(updated);
-    setMessage({ text: 'Profile updated successfully!', isError: false });
-    setTimeout(() => {
-      onClose();
-    }, 800);
+    try {
+      const token = localStorage.getItem('smartwaste_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.user) {
+        try {
+          localStorage.setItem('smartwaste_current_user', JSON.stringify(data.user));
+        } catch {}
+        onLoginSuccess(data.user);
+        setMessage({ text: 'Profile updated and saved permanently!', isError: false });
+        setTimeout(() => {
+          onClose();
+        }, 700);
+        return;
+      }
+      setMessage({ text: data.error || 'Failed to save profile changes.', isError: true });
+    } catch {
+      setMessage({ text: 'Network error while saving profile changes. Please retry.', isError: true });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -203,7 +254,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Tab Selector */}
         <div className="flex border-b border-[#e5e1cc] bg-[#f5f2e9] p-1">
           <button
-            onClick={() => setMode('login')}
+            onClick={() => {
+              setMode('login');
+              setMessage(null);
+            }}
             className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
               mode === 'login'
                 ? 'bg-white text-[#2d3a2d] shadow-xs'
@@ -213,7 +267,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {t.signIn}
           </button>
           <button
-            onClick={() => setMode('register')}
+            onClick={() => {
+              setMode('register');
+              setMessage(null);
+            }}
             className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
               mode === 'register'
                 ? 'bg-white text-[#2d3a2d] shadow-xs'
@@ -225,6 +282,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             onClick={() => {
               setMode('profile');
+              setMessage(null);
               if (currentUser) {
                 setName(currentUser.name);
                 setPhone(currentUser.phone || '');
@@ -307,11 +365,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-[#4a5548] mb-1">
+                  {t.ward}
+                </label>
+                <input
+                  type="text"
+                  list="profile-ward-presets"
+                  value={ward}
+                  onChange={(e) => setWard(e.target.value)}
+                  placeholder="Enter your local area / ward / town"
+                  className="w-full px-3 py-2 bg-white border border-[#d8d2c2] rounded-xl text-xs text-[#2d3a2d] focus:outline-none focus:border-[#5d7a5c]"
+                />
+                <datalist id="profile-ward-presets">
+                  <option value="Ward 12 - Green Park" />
+                  <option value="Ward 08 - Market Road" />
+                  <option value="Ward 04 - Railway Station" />
+                  <option value="Ward 02 - Central Market" />
+                </datalist>
+              </div>
+
               <button
                 type="submit"
-                className="w-full mt-2 py-2.5 bg-[#5d7a5c] hover:bg-[#4d664c] text-white font-bold rounded-xl text-xs transition shadow-sm"
+                disabled={loading}
+                className="w-full mt-2 py-2.5 bg-[#5d7a5c] hover:bg-[#4d664c] text-white font-bold rounded-xl text-xs transition shadow-sm disabled:opacity-50"
               >
-                Save Profile Changes
+                {loading ? 'Saving Profile...' : 'Save Profile Changes'}
               </button>
             </form>
           ) : (
@@ -377,8 +456,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           role === 'admin'
                             ? 'admin@municipal.gov.in'
                             : role === 'worker'
-                            ? 'suresh.k@swms.worker.in'
-                            : 'ananya.v@gmail.com'
+                            ? 'worker.suresh@municipal.gov.in'
+                            : 'citizen.ananya@gmail.com'
                         }
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -412,7 +491,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type="button"
                         onClick={() => {
                           setRole('citizen');
-                          setEmail('ananya.v@gmail.com');
+                          setEmail('citizen.ananya@gmail.com');
                           setPassword('demo123');
                         }}
                         className="text-[10px] px-2 py-1 bg-[#e8e4d3] hover:bg-[#d8d2be] text-[#2d3a2d] rounded-md font-medium transition shrink-0"
@@ -423,7 +502,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type="button"
                         onClick={() => {
                           setRole('worker');
-                          setEmail('suresh.k@swms.worker.in');
+                          setEmail('worker.suresh@municipal.gov.in');
                           setPassword('demo123');
                         }}
                         className="text-[10px] px-2 py-1 bg-[#e8e4d3] hover:bg-[#d8d2be] text-[#2d3a2d] rounded-md font-medium transition shrink-0"

@@ -91,12 +91,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Right Area: Language Selector, Notification Bell & User Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Language Selector Dropdown */}
-            <div className="relative flex items-center bg-[#232f23] border border-[#3a493a] rounded-xl px-2 py-1 text-xs">
-              <Globe className="w-3.5 h-3.5 text-[#5d7a5c] mr-1 shrink-0" />
+            <div className="relative flex items-center h-9 bg-[#232f23] border border-[#3a493a] rounded-xl px-2.5 text-xs">
+              <Globe className="w-3.5 h-3.5 text-[#5d7a5c] mr-1.5 shrink-0" />
               <select
                 value={currentLang}
                 onChange={(e) => onLangChange(e.target.value as LanguageCode)}
-                className="bg-transparent text-xs font-semibold text-[#fdfcf9] focus:outline-none cursor-pointer pr-1"
+                className="bg-transparent text-xs font-semibold leading-normal text-[#fdfcf9] focus:outline-none cursor-pointer pr-1 py-1"
               >
                 {SUPPORTED_LANGUAGES.map((lang) => (
                   <option key={lang.code} value={lang.code} className="bg-[#2d3a2d] text-white">

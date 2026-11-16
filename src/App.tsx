@@ -181,20 +181,32 @@ export default function App() {
 
   // Submit New Complaint
   const handleSubmitComplaint = async (newCompData: Partial<Complaint>) => {
+    const payload = {
+      ...newCompData,
+      citizenId: newCompData.citizenId || currentUser.id,
+      citizenName: newCompData.citizenName || currentUser.name,
+      citizenPhone: newCompData.citizenPhone || currentUser.phone || '+91 99887 76655'
+    };
     try {
       const res = await fetch('/api/complaints', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newCompData)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         const data = await res.json();
         if (data.complaint) {
           setComplaints((prev) => [data.complaint, ...prev]);
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to submit complaint');
       }
-    } catch {
-      // Local fallback
+    } catch (err: any) {
+      if (err?.message && err.message !== 'Failed to fetch') {
+        throw err;
+      }
+      // Local fallback only when network unreachable
       const newTicket: Complaint = {
         id: `cmp-${Date.now()}`,
         ticketNo: `WM-2026-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -202,11 +214,11 @@ export default function App() {
         description: newCompData.description || 'Reported by resident.',
         garbageType: newCompData.garbageType || 'Plastic & Recyclable',
         severity: newCompData.severity || 'High',
-        address: newCompData.address || 'Green Park Avenue',
-        ward: newCompData.ward || 'Ward 12 - Green Park',
-        lat: 18.5204,
-        lng: 73.8567,
-        imageUrl: newCompData.imageUrl || 'https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?auto=format&fit=crop&w=800&q=80',
+        address: newCompData.address || 'Local Street Address, India',
+        ward: newCompData.ward || 'Local Municipal Ward',
+        lat: typeof newCompData.lat === 'number' ? newCompData.lat : 20.5937,
+        lng: typeof newCompData.lng === 'number' ? newCompData.lng : 78.9629,
+        imageUrl: newCompData.imageUrl || '',
         status: 'pending',
         citizenId: currentUser.id,
         citizenName: currentUser.name,
@@ -272,8 +284,14 @@ export default function App() {
         if (data.complaint) {
           setComplaints((prev) => prev.map((c) => (c.id === complaintId ? data.complaint : c)));
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to update status');
       }
-    } catch {
+    } catch (err: any) {
+      if (err?.message && err.message !== 'Failed to fetch') {
+        throw err;
+      }
       setComplaints((prev) =>
         prev.map((c) =>
           c.id === complaintId

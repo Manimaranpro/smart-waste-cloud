@@ -52,23 +52,27 @@ export const RouteOptimizerView: React.FC<RouteOptimizerViewProps> = ({
       if (!isUnresolved) return false;
 
       if (scope === 'my_assigned') {
-        return c.workerId === currentUser.id || c.workerId === currentWorker.userId;
+        return c.workerId === currentUser.id || (currentWorker?.userId ? c.workerId === currentWorker.userId : false);
       } else {
-        // All unresolved in the worker's ward
-        return c.ward === currentWorker.ward;
+        return currentWorker?.ward ? c.ward === currentWorker.ward : true;
       }
     });
-  }, [complaints, scope, currentUser.id, currentWorker.userId, currentWorker.ward]);
+  }, [complaints, scope, currentUser.id, currentWorker?.userId, currentWorker?.ward]);
 
   // Compute optimized route
   const routeResult: RouteOptimizationResult = useMemo(() => {
-    const start = workerCoords || { lat: 18.5204, lng: 73.8567, label: `${currentWorker.ward} Depot` };
+    const wardLabel = currentWorker?.ward || currentUser.ward || 'Municipal';
+    const firstValidStop = targetComplaints.find(
+      (c) => Number.isFinite(c.lat) && Number.isFinite(c.lng)
+    );
+    const start = workerCoords ||
+      (firstValidStop ? { lat: firstValidStop.lat, lng: firstValidStop.lng } : { lat: 20.5937, lng: 78.9629 });
     return optimizeWorkerRoute(
-      { ...start, label: workerCoords ? 'Worker Live Position' : `${currentWorker.ward} Depot` },
+      { ...start, label: workerCoords ? 'Worker Live Position' : `${wardLabel} Depot` },
       targetComplaints,
       strategy
     );
-  }, [workerCoords, targetComplaints, strategy, currentWorker.ward]);
+  }, [workerCoords, targetComplaints, strategy, currentWorker?.ward, currentUser.ward]);
 
   return (
     <div className="bg-[#fdfcf9] border border-[#d9d4c1] rounded-[28px] p-5 sm:p-6 shadow-sm space-y-6">
@@ -100,7 +104,7 @@ export const RouteOptimizerView: React.FC<RouteOptimizerViewProps> = ({
                   : 'text-[#7a8a7a] hover:text-[#2d3a2d]'
               }`}
             >
-              My Tasks ({complaints.filter(c => (c.workerId === currentUser.id || c.workerId === currentWorker.userId) && c.status !== 'completed' && c.status !== 'verified').length})
+              My Tasks ({complaints.filter(c => c.workerId === currentUser.id && c.status !== 'completed' && c.status !== 'verified').length})
             </button>
             <button
               onClick={() => setScope('ward_all')}
@@ -110,7 +114,7 @@ export const RouteOptimizerView: React.FC<RouteOptimizerViewProps> = ({
                   : 'text-[#7a8a7a] hover:text-[#2d3a2d]'
               }`}
             >
-              All Ward Tasks ({complaints.filter(c => c.ward === currentWorker.ward && c.status !== 'completed' && c.status !== 'verified').length})
+              All Ward Tasks ({complaints.filter(c => (currentWorker?.ward ? c.ward === currentWorker.ward : true) && c.status !== 'completed' && c.status !== 'verified').length})
             </button>
           </div>
 
@@ -139,17 +143,17 @@ export const RouteOptimizerView: React.FC<RouteOptimizerViewProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-[#f2f0e4] rounded-2xl p-3.5 border border-[#d9d4c1]">
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#7a8a7a] block">
-            Optimized Distance
+            Est. Optimized Distance
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="font-serif italic text-2xl font-bold text-[#2d3a2d]">
-              {routeResult.totalDistanceKm}
+              ~{routeResult.totalDistanceKm}
             </span>
             <span className="text-xs text-[#7a8a7a] font-medium">km</span>
           </div>
           {routeResult.distanceSavedKm > 0 && (
             <span className="text-[10px] text-emerald-700 font-bold block mt-0.5">
-              Saved {routeResult.distanceSavedKm} km ({routeResult.distanceSavedPercent}% less)
+              Est. {routeResult.distanceSavedKm} km saved ({routeResult.distanceSavedPercent}% less)
             </span>
           )}
         </div>
@@ -160,12 +164,12 @@ export const RouteOptimizerView: React.FC<RouteOptimizerViewProps> = ({
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="font-serif italic text-2xl font-bold text-[#2d3a2d]">
-              {routeResult.totalTripMinutes}
+              ~{routeResult.totalTripMinutes}
             </span>
             <span className="text-xs text-[#7a8a7a] font-medium">mins</span>
           </div>
           <span className="text-[10px] text-[#7a8a7a] block mt-0.5">
-            {routeResult.totalDrivingMinutes}m transit + {routeResult.totalCleanupMinutes}m work
+            ~{routeResult.totalDrivingMinutes}m transit + ~{routeResult.totalCleanupMinutes}m work
           </span>
         </div>
 
@@ -180,13 +184,13 @@ export const RouteOptimizerView: React.FC<RouteOptimizerViewProps> = ({
             <span className="text-xs text-[#7a8a7a] font-medium">locations</span>
           </div>
           <span className="text-[10px] text-[#5d7a5c] font-bold block mt-0.5 truncate">
-            {currentWorker.ward}
+            {currentWorker?.ward || currentUser.ward || 'Municipal Ward'}
           </span>
         </div>
 
         <div className="bg-[#f2f0e4] rounded-2xl p-3.5 border border-[#d9d4c1]">
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#7a8a7a] block">
-            Fuel & Eco Offset
+            Est. CO₂ Offset
           </span>
           <div className="flex items-baseline gap-1 mt-0.5">
             <span className="font-serif italic text-2xl font-bold text-emerald-700">
@@ -196,7 +200,7 @@ export const RouteOptimizerView: React.FC<RouteOptimizerViewProps> = ({
           </div>
           <span className="text-[10px] text-emerald-800 font-semibold block mt-0.5 flex items-center gap-1">
             <Leaf className="w-3 h-3 text-emerald-600" />
-            <span>Green City Routing</span>
+            <span>Estimated Fuel Savings</span>
           </span>
         </div>
       </div>
@@ -370,7 +374,11 @@ export const RouteOptimizerView: React.FC<RouteOptimizerViewProps> = ({
                   {/* Actions for this stop */}
                   <div className="flex items-center gap-2 shrink-0">
                     <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${cmp.lat},${cmp.lng}`}
+                      href={
+                        !cmp.isLiveGpsVerified && cmp.lat === 20.5937 && cmp.lng === 78.9629 && cmp.address
+                          ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cmp.address)}`
+                          : `https://www.google.com/maps/dir/?api=1&destination=${cmp.lat},${cmp.lng}`
+                      }
                       target="_blank"
                       rel="noreferrer"
                       className="p-2.5 bg-[#f2f0e4] hover:bg-[#e5e1cc] text-[#2d3a2d] rounded-xl border border-[#d9d4c1] transition cursor-pointer"

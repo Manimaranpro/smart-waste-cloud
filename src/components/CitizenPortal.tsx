@@ -3,12 +3,13 @@ import { Complaint, GarbageType, ComplaintSeverity, User } from '../types';
 import { MapPin, Camera, Star, Plus, ShieldCheck, Upload, Sparkles, CheckCircle2, Navigation, Activity, ExternalLink, Zap, AlertCircle, QrCode } from 'lucide-react';
 import { LanguageCode, TRANSLATIONS } from '../data/translations';
 import { DumpsterQRModal, DumpsterQRPayload } from './DumpsterQRModal';
+import { compressImageFile } from '../utils/imageCompress';
 
 interface CitizenPortalProps {
   currentUser: User;
   complaints: Complaint[];
-  onSubmitComplaint: (newComplaint: Partial<Complaint>) => void;
-  onSubmitFeedback: (complaintId: string, rating: number, comment: string) => void;
+  onSubmitComplaint: (newComplaint: Partial<Complaint>) => Promise<void>;
+  onSubmitFeedback: (complaintId: string, rating: number, comment: string) => Promise<void>;
   currentLang?: LanguageCode;
 }
 
@@ -24,22 +25,27 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
   const [description, setDescription] = useState('');
   const [garbageType, setGarbageType] = useState<GarbageType>('Plastic & Recyclable');
   const [severity, setSeverity] = useState<ComplaintSeverity>('High');
-  const [address, setAddress] = useState('Green Park Avenue, Gate 2, Ward 12');
-  const [ward, setWard] = useState('Ward 12 - Green Park');
-  const [imageUrl, setImageUrl] = useState('https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?auto=format&fit=crop&w=800&q=80');
+  const [address, setAddress] = useState('');
+  const [ward, setWard] = useState(currentUser?.ward || 'Ward 12 - Green Park');
+  const [imageUrl, setImageUrl] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Physical Dumpster QR Code State
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [qrModalMode, setQrModalMode] = useState<'scan' | 'generate'>('scan');
   const [scannedBinTag, setScannedBinTag] = useState<string | null>(null);
-  
-  // Real-Time GPS Tracking State
+
+  // Real-Time GPS & India Local Address Geocoding State
   const [liveGps, setLiveGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocatingGps, setIsLocatingGps] = useState(false);
+  const [isGeocodingAddress, setIsGeocodingAddress] = useState(false);
   const [gpsStatusMsg, setGpsStatusMsg] = useState<string | null>(null);
 
-  // Gemini 3.8 Flash Multimodal AI Vision State
+  // Gemini Multimodal AI Vision State
   const [isScanningAI, setIsScanningAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<{
     detectedType: GarbageType;
     severity: ComplaintSeverity;
@@ -58,37 +64,62 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
   const [selectedFeedbackTicket, setSelectedFeedbackTicket] = useState<Complaint | null>(null);
   const [rating, setRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
 
-  // Real-time GPS Pinpoint with high accuracy
+  // Real-time GPS Pinpoint with Reverse Geocoding into real local Indian address
   const handleRealTimeLocation = () => {
     if (!navigator.geolocation) {
-      setGpsStatusMsg('Geolocation API is not supported by your browser.');
+      setGpsStatusMsg('Geolocation API is not supported by your browser. Enter your local address in India or scan Dumpster QR.');
       return;
     }
 
     setIsLocatingGps(true);
-    setGpsStatusMsg('Acquiring high-accuracy satellite GPS fix...');
+    setGpsStatusMsg('Acquiring high-accuracy GPS fix...');
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        const accuracy = Math.round(pos.coords.accuracy || 5);
+        const accuracy = Math.round(pos.coords.accuracy || 10);
         setLiveGps({ lat, lng, accuracy });
-        setAddress(`GPS Fix [${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E] • ${ward}`);
-        setGpsStatusMsg(`Live GPS Locked: Accuracy ±${accuracy} meters`);
-        setIsLocatingGps(false);
+        setGeocodedCoords(null);
+        setGpsStatusMsg(`Live GPS Locked (±${accuracy}m). Resolving local address...`);
+
+        try {
+          const res = await fetch(`/api/location/reverse?lat=${lat}&lng=${lng}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.address) {
+              setAddress(data.address);
+            } else {
+              setAddress(`GPS Fix [${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E]`);
+            }
+            if (data.wardSuggestion) {
+              setWard(data.wardSuggestion);
+            }
+            setGpsStatusMsg(`Live Local GPS Verified (±${accuracy}m)`);
+          } else {
+            setAddress(`GPS Fix [${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E]`);
+            setGpsStatusMsg(`Live GPS Locked: Accuracy ±${accuracy} meters`);
+          }
+        } catch {
+          setAddress(`GPS Fix [${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E]`);
+          setGpsStatusMsg(`Live GPS Locked: Accuracy ±${accuracy} meters`);
+        } finally {
+          setIsLocatingGps(false);
+        }
       },
       (err) => {
         setIsLocatingGps(false);
-        // Calibrated fallback coordinates with realistic notification
-        const fallbackLat = 18.5204 + (Math.random() - 0.5) * 0.01;
-        const fallbackLng = 73.8567 + (Math.random() - 0.5) * 0.01;
-        setLiveGps({ lat: fallbackLat, lng: fallbackLng, accuracy: 8 });
-        setAddress(`GPS Fix [${fallbackLat.toFixed(5)}° N, ${fallbackLng.toFixed(5)}° E] • ${ward}`);
-        setGpsStatusMsg(`Device Location Locked (High Accuracy ±8m)`);
+        setLiveGps(null);
+        setGpsStatusMsg(
+          err.code === 1
+            ? 'GPS permission denied. Type your local address below and click Locate, or scan a Dumpster QR.'
+            : 'Unable to acquire GPS fix right now. Type your local address below and click Locate.'
+        );
       },
       {
         enableHighAccuracy: true,
@@ -98,13 +129,46 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
     );
   };
 
-  // Pre-fill location & details from physical Dumpster QR Tag scan
+  // Pinpoint typed local Indian address on map
+  const handleLocateTypedAddress = async () => {
+    const query = address.trim();
+    if (!query || query.length < 3) {
+      setGpsStatusMsg('Please type your street, area, town/city, and state or pincode in India first.');
+      return;
+    }
+
+    setIsGeocodingAddress(true);
+    setGpsStatusMsg('Pinpointing your local India address...');
+    try {
+      const res = await fetch(`/api/location/geocode?q=${encodeURIComponent(query)}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Number.isFinite(data.lat) && Number.isFinite(data.lng)) {
+        setLiveGps(null);
+        setGeocodedCoords({ lat: Number(data.lat), lng: Number(data.lng) });
+        if (data.wardSuggestion) {
+          setWard(data.wardSuggestion);
+        }
+        setGpsStatusMsg(
+          `India Location Pinned: ${Number(data.lat).toFixed(5)}°N, ${Number(data.lng).toFixed(5)}°E`
+        );
+      } else {
+        setGpsStatusMsg(data.error || 'Address not found on map. Try adding town/city, state, or pincode.');
+      }
+    } catch {
+      setGpsStatusMsg('Address lookup service unreachable right now. Your typed address will still be saved.');
+    } finally {
+      setIsGeocodingAddress(false);
+    }
+  };
+
+  // Pre-fill location & details from verified Dumpster QR Tag scan
   const handleApplyDumpsterLocation = (dumpster: DumpsterQRPayload) => {
     setAddress(dumpster.address);
     setWard(dumpster.ward);
     setLiveGps({ lat: dumpster.lat, lng: dumpster.lng, accuracy: 2 });
+    setGeocodedCoords(null);
     setScannedBinTag(dumpster.binId);
-    setGpsStatusMsg(`Dumpster QR Tag Linked: ${dumpster.binId} (${dumpster.ward})`);
+    setGpsStatusMsg(`Dumpster QR Tag Verified: ${dumpster.binId} (${dumpster.ward})`);
     setGarbageType('Overflowing Public Dumpster');
     if (!title) {
       setTitle(`Overflowing Municipal Dumpster [${dumpster.binId}]`);
@@ -112,87 +176,154 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
     setShowForm(true);
   };
 
-  // Handle File Upload preview
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle File Upload preview with compression
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageUrl(reader.result as string);
+      try {
+        const compressed = await compressImageFile(file, 1280, 0.8);
+        setImageUrl(compressed);
         setAiAnalysisResult(null);
-      };
-      reader.readAsDataURL(file);
+        setAiError(null);
+        setSubmitError(null);
+      } catch (err: any) {
+        setSubmitError(err?.message || 'Failed to read selected image file.');
+      }
     }
   };
 
-  // Gemini 3.8 Multimodal AI Waste Vision Scanner
+  // Gemini Multimodal AI Waste Vision Scanner (no fake fallbacks)
   const handleAIScan = async () => {
+    if (!imageUrl || !imageUrl.startsWith('data:image/')) {
+      setAiError('Please upload a waste photograph from your device first.');
+      return;
+    }
+
+    const token = localStorage.getItem('smartwaste_token');
     setIsScanningAI(true);
+    setAiError(null);
+    setAiAnalysisResult(null);
+
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
       const res = await fetch('/api/ai-analyze-waste', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ imageBase64: imageUrl })
       });
-      const data = await res.json();
-      if (data) {
-        if (data.detectedType) setGarbageType(data.detectedType as GarbageType);
-        if (data.severity) setSeverity(data.severity as ComplaintSeverity);
-        setAiAnalysisResult(data);
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAiError(data.error || 'Gemini AI image analysis failed. Please try another photograph.');
+        return;
       }
-    } catch (err) {
-      console.error(err);
+
+      if (data.detectedType) setGarbageType(data.detectedType as GarbageType);
+      if (data.severity) setSeverity(data.severity as ComplaintSeverity);
+      setAiAnalysisResult(data);
+    } catch {
+      setAiError('Network error while contacting Gemini AI analysis service. Please retry.');
     } finally {
       setIsScanningAI(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmitComplaint({
-      title: title || `${garbageType} reported near ${ward}`,
-      description: description || 'Garbage pile requires prompt municipal truck collection.',
-      garbageType,
-      severity,
-      address,
-      ward,
-      lat: liveGps ? liveGps.lat : 18.5204 + (Math.random() - 0.5) * 0.02,
-      lng: liveGps ? liveGps.lng : 73.8567 + (Math.random() - 0.5) * 0.02,
-      imageUrl,
-      citizenId: currentUser.id,
-      citizenName: currentUser.name,
-      citizenPhone: currentUser.phone || '+91 99887 76655',
-      estimatedFillPercent: aiAnalysisResult?.estimatedFillPercent || 85,
-      priorityScore: aiAnalysisResult?.recommendedPriority || 80,
-      gpsAccuracyMeters: liveGps?.accuracy,
-      isLiveGpsVerified: !!liveGps,
-      aiAnalysis: aiAnalysisResult ? {
-        detectedType: aiAnalysisResult.detectedType,
-        hazardLevel: aiAnalysisResult.hazardLevel,
-        confidence: aiAnalysisResult.confidence,
-        recyclablePercentage: aiAnalysisResult.recyclablePercentage,
-        estimatedVolume: aiAnalysisResult.estimatedVolume,
-        carbonOffsetKg: aiAnalysisResult.carbonOffsetKg,
-        recommendedEquipment: aiAnalysisResult.recommendedEquipment,
-        aiAnalysisNotes: aiAnalysisResult.aiAnalysisNotes
-      } : undefined
-    });
+    setSubmitError(null);
 
-    // Reset Form
-    setShowForm(false);
-    setTitle('');
-    setDescription('');
-    setAiAnalysisResult(null);
-    setLiveGps(null);
-    setGpsStatusMsg(null);
+    if (!address.trim()) {
+      setSubmitError('Please enter your local personal street address in India or click Live GPS.');
+      return;
+    }
+
+    if (!imageUrl) {
+      setSubmitError('Please upload a photograph of the waste location before submitting.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      let submitLat = liveGps?.lat ?? geocodedCoords?.lat;
+      let submitLng = liveGps?.lng ?? geocodedCoords?.lng;
+
+      // Auto-resolve typed personal India address to real coordinates if Live GPS wasn't used
+      if (submitLat === undefined || submitLng === undefined) {
+        try {
+          const geoRes = await fetch(`/api/location/geocode?q=${encodeURIComponent(address.trim())}`);
+          if (geoRes.ok) {
+            const geoData = await geoRes.json();
+            if (Number.isFinite(geoData.lat) && Number.isFinite(geoData.lng)) {
+              submitLat = Number(geoData.lat);
+              submitLng = Number(geoData.lng);
+            }
+          }
+        } catch {
+          // Proceed cleanly with India fallback coordinates if offline
+        }
+      }
+
+      await onSubmitComplaint({
+        title: title || `${garbageType} reported near ${ward}`,
+        description: description || 'Garbage pile requires prompt municipal truck collection.',
+        garbageType,
+        severity,
+        address: address.trim(),
+        ward: ward.trim() || 'Local Municipal Ward',
+        lat: submitLat ?? 20.5937,
+        lng: submitLng ?? 78.9629,
+        imageUrl,
+        estimatedFillPercent: aiAnalysisResult?.estimatedFillPercent ?? 80,
+        priorityScore: aiAnalysisResult?.recommendedPriority ?? 75,
+        gpsAccuracyMeters: liveGps?.accuracy,
+        isLiveGpsVerified: !!liveGps,
+        binTag: scannedBinTag || undefined,
+        aiAnalysis: aiAnalysisResult ? {
+          detectedType: aiAnalysisResult.detectedType,
+          hazardLevel: aiAnalysisResult.hazardLevel,
+          confidence: aiAnalysisResult.confidence,
+          recyclablePercentage: aiAnalysisResult.recyclablePercentage,
+          estimatedVolume: aiAnalysisResult.estimatedVolume,
+          carbonOffsetKg: aiAnalysisResult.carbonOffsetKg,
+          recommendedEquipment: aiAnalysisResult.recommendedEquipment,
+          aiAnalysisNotes: aiAnalysisResult.aiAnalysisNotes
+        } : undefined
+      });
+
+      // Reset Form ONLY after backend confirms persistence
+      setShowForm(false);
+      setTitle('');
+      setDescription('');
+      setAddress('');
+      setImageUrl('');
+      setAiAnalysisResult(null);
+      setAiError(null);
+      setLiveGps(null);
+      setGeocodedCoords(null);
+      setGpsStatusMsg(null);
+      setScannedBinTag(null);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to save complaint to database. Your form inputs were kept—please retry.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleRatingSubmit = (e: React.FormEvent) => {
+  const handleRatingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedFeedbackTicket) {
-      onSubmitFeedback(selectedFeedbackTicket.id, rating, feedbackComment);
+    if (!selectedFeedbackTicket) return;
+    setFeedbackError(null);
+    setIsSubmittingFeedback(true);
+    try {
+      await onSubmitFeedback(selectedFeedbackTicket.id, rating, feedbackComment);
       setSelectedFeedbackTicket(null);
       setFeedbackComment('');
+    } catch (err: any) {
+      setFeedbackError(err?.message || 'Failed to save rating to database. Please retry.');
+    } finally {
+      setIsSubmittingFeedback(false);
     }
   };
 
@@ -207,7 +338,7 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
               <ShieldCheck className="w-4 h-4 text-[#5d7a5c]" /> {t.citizenPortal}
             </div>
             <h2 className="text-3xl font-serif italic font-bold tracking-tight text-[#fdfcf9]">
-              {t.welcomeBack}, {currentUser.name}!
+              {t.welcomeBack}{currentUser ? `, ${currentUser.name}` : ''}!
             </h2>
             <p className="text-xs text-[#cbd5c0] mt-1 max-w-xl">
               {t.welcomeDesc}
@@ -318,16 +449,20 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
 
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-[#cbd5c0] mb-1">{t.wardLabel}</label>
-                    <select
+                    <input
+                      type="text"
+                      list="citizen-ward-presets"
                       value={ward}
                       onChange={(e) => setWard(e.target.value)}
+                      placeholder="Your local area / ward / town"
                       className="w-full bg-[#232f23] border border-[#3a493a] rounded-2xl px-4 py-2.5 text-xs text-[#fdfcf9] focus:outline-none focus:border-[#5d7a5c]"
-                    >
-                      <option value="Ward 12 - Green Park">Ward 12 - Green Park</option>
-                      <option value="Ward 08 - Market Road">Ward 08 - Market Road</option>
-                      <option value="Ward 04 - Railway Station">Ward 04 - Railway Station</option>
-                      <option value="Ward 02 - Central Market">Ward 02 - Central Market</option>
-                    </select>
+                    />
+                    <datalist id="citizen-ward-presets">
+                      <option value="Ward 12 - Green Park" />
+                      <option value="Ward 08 - Market Road" />
+                      <option value="Ward 04 - Railway Station" />
+                      <option value="Ward 02 - Central Market" />
+                    </datalist>
                   </div>
                 </div>
 
@@ -335,7 +470,7 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
                     <label className="block text-xs font-bold uppercase tracking-wider text-[#cbd5c0]">{t.addressLabel}</label>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => {
@@ -346,7 +481,17 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                         title="Scan QR code tag on physical dumpster to pre-fill location"
                       >
                         <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Scan Dumpster QR</span>
+                        <span>Scan Bin QR</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLocateTypedAddress}
+                        disabled={isGeocodingAddress}
+                        className="text-[11px] text-[#fdfcf9] bg-[#232f23] hover:bg-[#1a231a] border border-[#5d7a5c] px-2.5 py-1 rounded-full flex items-center gap-1 font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+                        title="Pinpoint your typed local Indian address on map"
+                      >
+                        <MapPin className="w-3 h-3 text-emerald-400" />
+                        <span>{isGeocodingAddress ? 'Locating...' : 'Pin Address'}</span>
                       </button>
                       <button
                         type="button"
@@ -381,21 +526,33 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                     type="text"
                     required
                     value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="w-full bg-[#232f23] border border-[#3a493a] rounded-2xl px-4 py-2.5 text-xs text-[#fdfcf9] focus:outline-none focus:border-[#5d7a5c]"
+                    placeholder="Enter your local personal street, area, town/city, India (or click Live GPS)"
+                    onChange={(e) => {
+                      setAddress(e.target.value);
+                      if (geocodedCoords) setGeocodedCoords(null);
+                    }}
+                    className="w-full bg-[#232f23] border border-[#3a493a] rounded-2xl px-4 py-2.5 text-xs text-[#fdfcf9] placeholder-[#8fa08f] focus:outline-none focus:border-[#5d7a5c]"
                   />
                   
-                  {/* Real-time GPS Locked Telemetry Card */}
-                  {liveGps && (
+                  {/* Real-time GPS / India Map Locked Telemetry Card */}
+                  {(liveGps || geocodedCoords) && (
                     <div className="mt-2 bg-[#232f23] border border-emerald-500/40 rounded-xl p-2.5 flex items-center justify-between text-[11px] text-emerald-400">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                         <span>
-                          <strong>GPS Locked:</strong> {liveGps.lat.toFixed(5)}°N, {liveGps.lng.toFixed(5)}°E (±{liveGps.accuracy}m accuracy)
+                          {liveGps ? (
+                            <>
+                              <strong>Live GPS Locked:</strong> {liveGps.lat.toFixed(5)}°N, {liveGps.lng.toFixed(5)}°E (±{liveGps.accuracy}m accuracy)
+                            </>
+                          ) : (
+                            <>
+                              <strong>India Address Pinned:</strong> {geocodedCoords!.lat.toFixed(5)}°N, {geocodedCoords!.lng.toFixed(5)}°E
+                            </>
+                          )}
                         </span>
                       </div>
                       <a
-                        href={`https://www.google.com/maps?q=${liveGps.lat},${liveGps.lng}`}
+                        href={`https://www.google.com/maps?q=${(liveGps || geocodedCoords)!.lat},${(liveGps || geocodedCoords)!.lng}`}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center gap-1 text-[#cbd5c0] hover:text-white underline"
@@ -404,6 +561,9 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
+                  )}
+                  {gpsStatusMsg && !liveGps && !geocodedCoords && (
+                    <p className="mt-1.5 text-[11px] text-amber-300">{gpsStatusMsg}</p>
                   )}
                 </div>
 
@@ -498,13 +658,21 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                     )}
                   </button>
 
+                  {/* Gemini AI Error / Relevance Rejection Alert */}
+                  {aiError && (
+                    <div className="mt-3 bg-rose-950/70 border border-rose-400/60 text-rose-200 p-3 rounded-xl text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-300 shrink-0 mt-0.5" />
+                      <span>{aiError}</span>
+                    </div>
+                  )}
+
                   {/* High-Impact AI Diagnostic Report */}
                   {aiAnalysisResult && (
                     <div className="mt-3 bg-[#2d3a2d] p-3.5 rounded-2xl border border-emerald-500/50 text-xs space-y-2.5 animate-in fade-in duration-200">
                       <div className="flex items-center justify-between border-b border-[#3a493a] pb-2">
                         <span className="font-bold text-white text-sm">AI Classification:</span>
                         <span className="bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full text-[11px] font-bold border border-emerald-500/40">
-                          {aiAnalysisResult.confidence || 96}% Confidence
+                          {aiAnalysisResult.confidence}% Confidence
                         </span>
                       </div>
 
@@ -515,28 +683,28 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                             aiAnalysisResult.hazardLevel === 'Critical' ? 'text-red-400' :
                             aiAnalysisResult.hazardLevel === 'Hazardous' ? 'text-amber-400' : 'text-emerald-400'
                           }`}>
-                            {aiAnalysisResult.hazardLevel || 'Safe'}
+                            {aiAnalysisResult.hazardLevel}
                           </span>
                         </div>
 
                         <div className="bg-[#232f23] p-2 rounded-xl border border-[#3a493a]">
-                          <span className="text-[#cbd5c0] block text-[10px] uppercase font-semibold">Estimated Volume</span>
+                          <span className="text-[#cbd5c0] block text-[10px] uppercase font-semibold">Volume (Est.)</span>
                           <span className="font-bold text-white">
-                            {aiAnalysisResult.estimatedVolume || '0.85 m³'}
+                            {aiAnalysisResult.estimatedVolume}
                           </span>
                         </div>
 
                         <div className="bg-[#232f23] p-2 rounded-xl border border-[#3a493a]">
-                          <span className="text-[#cbd5c0] block text-[10px] uppercase font-semibold">Recyclable Yield</span>
+                          <span className="text-[#cbd5c0] block text-[10px] uppercase font-semibold">Recyclable Yield (Est.)</span>
                           <span className="font-bold text-emerald-300">
-                            {aiAnalysisResult.recyclablePercentage || 78}%
+                            {aiAnalysisResult.recyclablePercentage}%
                           </span>
                         </div>
 
                         <div className="bg-[#232f23] p-2 rounded-xl border border-[#3a493a]">
-                          <span className="text-[#cbd5c0] block text-[10px] uppercase font-semibold">CO₂ Offset Potential</span>
+                          <span className="text-[#cbd5c0] block text-[10px] uppercase font-semibold">CO₂ Offset (Est.)</span>
                           <span className="font-bold text-cyan-300">
-                            {aiAnalysisResult.carbonOffsetKg || 5.2} kg CO₂e
+                            {aiAnalysisResult.carbonOffsetKg} kg CO₂e
                           </span>
                         </div>
                       </div>
@@ -544,7 +712,7 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                       <div className="bg-[#232f23] p-2 rounded-xl border border-[#3a493a] text-[11px]">
                         <span className="text-[#cbd5c0] block text-[10px] uppercase font-semibold mb-0.5">Recommended Municipal Gear:</span>
                         <span className="text-white font-medium">
-                          {aiAnalysisResult.recommendedEquipment || 'Hydraulic Rear Compactor Truck'}
+                          {aiAnalysisResult.recommendedEquipment}
                         </span>
                       </div>
 
@@ -559,6 +727,13 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
 
             </div>
 
+            {submitError && (
+              <div className="bg-rose-950/70 border border-rose-400/60 text-rose-200 p-3 rounded-2xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-300 shrink-0" />
+                <span>{submitError}</span>
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#3a493a]">
               <button
                 type="button"
@@ -569,9 +744,10 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
               </button>
               <button
                 type="submit"
-                className="bg-[#5d7a5c] hover:bg-[#4d664c] text-white font-bold px-8 py-2.5 rounded-full text-xs transition shadow cursor-pointer"
+                disabled={isSubmitting}
+                className="bg-[#5d7a5c] hover:bg-[#4d664c] text-white font-bold px-8 py-2.5 rounded-full text-xs transition shadow cursor-pointer disabled:opacity-50"
               >
-                {t.submitReport}
+                {isSubmitting ? 'Saving...' : t.submitReport}
               </button>
             </div>
           </form>
@@ -783,19 +959,30 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
                 />
               </div>
 
+              {feedbackError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{feedbackError}</span>
+                </div>
+              )}
+
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setSelectedFeedbackTicket(null)}
+                  onClick={() => {
+                    setSelectedFeedbackTicket(null);
+                    setFeedbackError(null);
+                  }}
                   className="flex-1 bg-[#e5e1cc] text-[#2d3a2d] font-semibold py-2.5 rounded-full text-xs hover:bg-[#d9d4c1] transition cursor-pointer"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-[#5d7a5c] text-white font-bold py-2.5 rounded-full text-xs hover:bg-[#4d664c] shadow transition cursor-pointer"
+                  disabled={isSubmittingFeedback}
+                  className="flex-1 bg-[#5d7a5c] text-white font-bold py-2.5 rounded-full text-xs hover:bg-[#4d664c] shadow transition cursor-pointer disabled:opacity-50"
                 >
-                  {t.submitRatingBtn}
+                  {isSubmittingFeedback ? 'Saving...' : t.submitRatingBtn}
                 </button>
               </div>
             </form>
@@ -809,6 +996,7 @@ export const CitizenPortal: React.FC<CitizenPortalProps> = ({
         onClose={() => setIsQRModalOpen(false)}
         onApplyLocation={handleApplyDumpsterLocation}
         initialMode={qrModalMode}
+        userRole={currentUser?.role || 'citizen'}
       />
 
     </div>

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Complaint, WorkerProfile, DashboardStats } from '../types';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { Shield, Users, AlertTriangle, CheckCircle2, Clock, Search, Filter, UserPlus, HardHat, FileText, Sparkles } from 'lucide-react';
+import { Shield, Users, AlertTriangle, CheckCircle2, Clock, Search, Filter, UserPlus, HardHat, FileText, Sparkles, QrCode } from 'lucide-react';
 import { LanguageCode, TRANSLATIONS } from '../data/translations';
+import { DumpsterQRModal } from './DumpsterQRModal';
 
 interface AdminPortalProps {
   stats: DashboardStats;
@@ -37,6 +38,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [newWorkerPhone, setNewWorkerPhone] = useState('');
   const [newWorkerWard, setNewWorkerWard] = useState('Ward 12 - Green Park');
   const [newWorkerVehicle, setNewWorkerVehicle] = useState('MH-12-GW-COMPACTOR');
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
   const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
 
@@ -101,6 +103,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setIsQRModalOpen(true)}
+              className="flex items-center gap-2 bg-[#232f23] hover:bg-[#1a231a] text-emerald-400 border border-emerald-500/40 font-bold px-4 py-2.5 rounded-full text-xs transition shadow-sm cursor-pointer"
+            >
+              <QrCode className="w-4 h-4" />
+              Register Dumpster QR
+            </button>
             <button
               onClick={() => setShowAddWorkerModal(true)}
               className="flex items-center gap-2 bg-[#5d7a5c] hover:bg-[#4d664c] text-white font-bold px-4 py-2.5 rounded-full text-xs transition shadow-sm cursor-pointer"
@@ -233,13 +242,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           {/* Search and Filters */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-[#7a8a7a] absolute left-3 top-3" />
+              <Search className="w-4 h-4 text-[#7a8a7a] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search ticket, address, or resident..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-white border border-[#d9d4c1] rounded-xl text-xs text-[#2d3a2d] focus:outline-none focus:border-[#5d7a5c]"
+                className="w-full h-9 pl-9 pr-3 py-1.5 bg-white border border-[#d9d4c1] rounded-xl text-xs leading-normal text-[#2d3a2d] focus:outline-none focus:border-[#5d7a5c]"
               />
             </div>
 
@@ -247,7 +256,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <select
                 value={selectedStatusFilter}
                 onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                className="bg-white border border-[#d9d4c1] rounded-xl px-3 py-2 text-xs text-[#2d3a2d] focus:outline-none focus:border-[#5d7a5c]"
+                className="h-9 bg-white border border-[#d9d4c1] rounded-xl px-3 py-1.5 text-xs leading-normal text-[#2d3a2d] focus:outline-none focus:border-[#5d7a5c] cursor-pointer"
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
@@ -260,13 +269,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <select
                 value={selectedWardFilter}
                 onChange={(e) => setSelectedWardFilter(e.target.value)}
-                className="bg-white border border-[#d9d4c1] rounded-xl px-3 py-2 text-xs text-[#2d3a2d] focus:outline-none focus:border-[#5d7a5c]"
+                className="h-9 bg-white border border-[#d9d4c1] rounded-xl px-3 py-1.5 text-xs leading-normal text-[#2d3a2d] focus:outline-none focus:border-[#5d7a5c] cursor-pointer"
               >
                 <option value="all">All Wards</option>
-                <option value="Ward 12 - Green Park">Ward 12</option>
-                <option value="Ward 08 - Market Road">Ward 08</option>
-                <option value="Ward 04 - Railway Station">Ward 04</option>
-                <option value="Ward 02 - Central Market">Ward 02</option>
+                {Array.from(
+                  new Set([
+                    ...complaints.map((c) => c.ward).filter(Boolean),
+                    'Ward 12 - Green Park',
+                    'Ward 08 - Market Road',
+                    'Ward 04 - Railway Station',
+                    'Ward 02 - Central Market'
+                  ])
+                ).map((wardOption) => (
+                  <option key={wardOption} value={wardOption}>
+                    {wardOption}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -330,14 +348,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       {c.workerName || <span className="text-[#7a8a7a] italic">Unassigned</span>}
                     </td>
                     <td className="py-3 px-3 text-right">
-                      {c.status === 'pending' && (
+                      {c.status === 'pending' ? (
                         <button
-                          onClick={() => setSelectedComplaintToAssign(c)}
+                          onClick={() => {
+                            setSelectedWorkerId('');
+                            setSelectedComplaintToAssign(c);
+                          }}
                           className="bg-[#5d7a5c] hover:bg-[#4d664c] text-white font-bold px-3 py-1.5 rounded-xl text-xs transition cursor-pointer"
                         >
                           {t.assignWorkerBtn}
                         </button>
-                      )}
+                      ) : (c.status === 'assigned' || c.status === 'in_progress') ? (
+                        <button
+                          onClick={() => {
+                            setSelectedWorkerId(c.workerId || '');
+                            setSelectedComplaintToAssign(c);
+                          }}
+                          className="bg-[#f2f0e4] hover:bg-[#e5e1cc] text-[#2d3a2d] border border-[#d9d4c1] font-semibold px-2.5 py-1 rounded-xl text-[11px] transition cursor-pointer"
+                        >
+                          Reassign
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -506,6 +537,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </div>
       )}
+
+      <DumpsterQRModal
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+        onApplyLocation={() => setIsQRModalOpen(false)}
+        initialMode="generate"
+        userRole="admin"
+      />
 
     </div>
   );

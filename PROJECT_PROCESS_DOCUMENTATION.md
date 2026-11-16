@@ -1,174 +1,211 @@
-# CleanCity AI: Smart Municipal Waste Monitoring & Field Operations System
-## Complete End-to-End Project Process Documentation
+# EcoTrack (Smart Waste Monitoring System)
+## Complete End-to-End Project Process, Innovative Techniques & Cloud Deployment Documentation
+
+**Live Production URL:** `https://smart-waste-monitoring.onrender.com`  
+**GitHub Repository:** `https://github.com/Manimaranpro/smart-waste-cloud`
 
 ---
 
 ## 1. Executive Summary & Project Purpose
 
-**CleanCity AI** is a full-stack, enterprise-grade municipal solid waste monitoring and field operations management system. It bridges the critical operational gap between **Citizens**, **Sanitation Field Workers**, and **Municipal Ward Administrators**.
+**EcoTrack (Smart Waste Monitoring System)** is a full-stack, cloud-hosted municipal solid waste monitoring, automated diagnostics, and field operations management platform. It establishes an accountable, closed-loop digital workflow connecting **Citizens**, **Municipal Sanitation Field Workers**, and **Municipal Ward Administrators**.
 
-Traditional municipal waste management applications suffer from a high rate of failure because they operate as passive, one-way grievance forms with no on-site location validation, no automated waste hazard analysis, and no verifiable proof of cleanup. 
+Conventional municipal waste apps fail in practice because they function as passive one-way grievance forms: citizens enter vague street addresses (often corrupted by urban GPS drift), human clerks manually guess waste types, truck drivers follow random unoptimized paths, and workers can falsely mark tickets as resolved without physical proof.
 
-CleanCity AI addresses these shortcomings by introducing an **active, closed-loop operational ecosystem** featuring:
-- **Client-Side Live GPS Geotagging** with accuracy thresholds.
-- **Multimodal AI Computer Vision** for automated material categorization, hazard scoring, recyclability percentage, and carbon offset estimation.
-- **Real-Time Worker Fleet Proximity Routing** using the Haversine spherical distance formula.
-- **Two-Sided Resolution Verification** requiring verifiable before-and-after photographic evidence with on-site GPS timestamps before closing tickets.
-- **Citizen Feedback & Accountability Loop** empowering the public to rate municipal sanitation performance.
+EcoTrack solves these real-world operational bottlenecks using an integrated pipeline of **Physical Dumpster QR Tagging**, **Multimodal AI Computer Vision (Gemini)**, **TSP + 2-Opt Multi-Stop Route Optimization**, **Photographic Closed-Loop Proof with On-Site GPS Stamping**, **6-Language Accessibility**, and **Dual-Persistence Cloud Storage**.
 
 ---
 
-## 2. Problem Statement & Distinction from "Existing Level" Systems
+## 2. Problem Statement & Distinction from Existing Systems
 
-### The Faculty Objection: *"Why is this different from existing systems like Swachhata App?"*
-
-| Dimension | Standard / Existing Baseline System | CleanCity AI (Our Proposed Project) |
+| Operational Area | Traditional / Existing Civic Apps (e.g., Basic Portals) | EcoTrack (Our Implemented System) |
 | :--- | :--- | :--- |
-| **Grievance Reporting** | Plain text form with optional static photo. No validation of dump location. | High-precision GPS pinpointing with browser geolocation accuracy tracking and address synchronization. |
-| **Material Understanding** | Manual citizen tagging (often inaccurate or unsegregated). | Automated **Multimodal Computer Vision** (Google Gemini 3.8 Flash / Calibrated Neural Engine) classifying waste type, hazard level, volume ($m^3$), recyclability %, and $kg\text{ CO}_2$ offset. |
-| **Worker Dispatch** | Static manual spreadsheets or phone calls without distance awareness. | Proximity-aware dispatch computing **Haversine Distance** from worker's live GPS to the waste location, with estimated transit time. |
-| **Resolution Integrity** | Worker clicks "Resolved" with no accountability; ghost closures are common. | Strict **Before vs. After Photo Comparison** accompanied by on-site GPS timestamp stamps. |
-| **Data Persistence** | Crashes if remote database drops connection. | **Dual-Persistence Architecture**: MongoDB Atlas with automatic, high-speed cloud in-memory fallback. |
-| **Accessibility** | Typically English-only. | Native multilingual support (English, Hindi, Tamil, Telugu, Marathi). |
+| **Location Accuracy** | Manual street typing or drifting mobile GPS pinpoints. | **Physical Dumpster QR Tagging** (`BIN-W12-04`, etc.) instantly pre-fills exact Bin ID, Ward, Address, and calibrated GPS coordinates + **Live GPS Pinpoint** accuracy check. |
+| **Waste Classification** | Passive photo attachment; manual guesswork on material type and danger level. | **Multimodal AI Vision (`@google/genai`)** automatically detects material category, hazard level, confidence %, recyclable yield %, volume ($m^3$), $\text{CO}_2$ offset potential, and mandatory worker PPE/equipment. |
+| **Field Routing** | Static unorganized task lists; drivers waste fuel driving back and forth. | **TSP + 2-Opt Multi-Stop Route Optimizer** computes the shortest path across pending ward stops using **Haversine Distance**, supports **Urgency & Hazard Priority**, estimates $\text{CO}_2$ saved, and launches **multi-stop Google Maps navigation**. |
+| **Resolution Integrity** | Workers click "Done" with no verification ("ghost closures"). | **Closed-Loop Proof**: Requires side-by-side **Before vs. After Photos** + **On-Site GPS Timestamp Stamp** + **1–5 Star Citizen Feedback**. |
+| **Language Inclusion** | Typically English-only, excluding sanitation staff and regional citizens. | **6-Language Localization Engine**: English, Tamil (`தமிழ்`), Tanglish, Hindi (`हिन्दी`), Telugu (`తెలుగు`), and Kannada (`ಕನ್ನಡ`). |
+| **Reliability** | Fails if remote database connection drops during live use. | **Dual-Persistence Architecture**: MongoDB Atlas (Mongoose) with seamless high-speed cloud in-memory fallback. |
 
 ---
 
-## 3. Technology Stack & System Architecture
+## 3. Technology Stack & Codebase Architecture
 
-### Frontend Architecture
-- **Framework:** React 18 with TypeScript (Strict mode enabled).
-- **Styling:** Tailwind CSS (Utility-first, responsive, accessible color contrast).
-- **Icons & UI:** Lucide React icons.
-- **Visualizations:** Recharts (Pie charts for waste composition, Bar charts for ward metrics).
-- **Internationalization:** Context-aware multilingual dictionary (`en`, `hi`, `ta`, `te`, `mr`).
+### Frontend Stack
+- **Core:** React 19 + TypeScript (`~5.8.2`) bundled with Vite 6 (`vite.config.ts`).
+- **Styling:** Tailwind CSS v4 (`@tailwindcss/vite`) with responsive design across desktop and mobile.
+- **Icons & Visualization:** `lucide-react` for UI iconography; `recharts` for executive analytics (Pie charts & Bar charts).
+- **QR Engine:** `qrcode` library for client-side high-error-correction (`H` level) PNG sticker generation.
+- **State Persistence:** `localStorage` (`smartwaste_current_user`) synchronized with `/api/auth/me` session rehydration.
 
-### Backend Architecture
-- **Runtime:** Node.js with TypeScript (`server.ts`).
-- **Web Framework:** Express.js RESTful API.
-- **AI Vision Pipeline:** Google GenAI SDK (`@google/genai`) running `gemini-3.8-flash` with structured JSON output prompts.
-- **Database & ODM:** MongoDB Atlas via Mongoose + resilient in-memory data store for uninterrupted viva demonstrations.
+### Backend & AI Stack
+- **Server Runtime:** Node.js + Express (`server.ts`) compiled via `esbuild` into `dist/server.cjs` for production.
+- **AI Vision Pipeline:** `@google/genai` SDK invoking `gemini-3.8-flash` with strict JSON extraction prompts and calibrated offline fallback diagnostics.
+- **Database Layer:** MongoDB Atlas via `mongoose` (`src/db/models.ts`) paired with an active in-memory store fallback.
 
----
-
-## 4. End-to-End Operational Lifecycle (The Full Process)
-
-The entire project operates across four sequential phases:
-
-```
-[ Phase 1: Citizen ] 
-       │
-       ▼  (1) Uploads waste photo & triggers GPS
-       ▼  (2) AI Diagnostic detects material, hazard & carbon metrics
-       ▼  (3) Submits ticket (Status: PENDING)
-       │
-[ Phase 2: Municipal Admin Command ]
-       │
-       ▼  (4) Admin monitors real-time stats & ward distributions
-       ▼  (5) Assigns ticket to designated ward worker (Status: ASSIGNED)
-       │
-[ Phase 3: Field Sanitation Worker ]
-       │
-       ▼  (6) Receives task with computed Haversine distance & transit time
-       ▼  (7) Dispatches to site with required PPE & vehicle
-       ▼  (8) Changes status to IN_PROGRESS
-       ▼  (9) Uploads After-Cleanup Proof Photo with GPS stamp
-       ▼  (10) Marks ticket COMPLETED
-       │
-[ Phase 4: Citizen Verification & Rating ]
-       │
-       ▼  (11) Citizen views Before vs. After side-by-side proof
-       ▼  (12) Citizen submits 1-5 Star rating & feedback comment
+### Project Directory Structure
+```text
+├── server.ts                         # Express server, API routes, Gemini AI integration, Vite/dist serving
+├── package.json                      # Scripts (dev, build, start, lint) and dependencies
+├── metadata.json                     # App capabilities (camera, geolocation, server-side Gemini API)
+├── index.html                        # Root HTML entry point & SEO metadata
+├── PROJECT_PROCESS_DOCUMENTATION.md  # Complete system & deployment process documentation
+└── src/
+    ├── App.tsx                       # Root state, API orchestration, role switching, session rehydration
+    ├── types.ts                      # TypeScript interfaces (User, Complaint, WorkerProfile, DashboardStats)
+    ├── db/
+    │   └── models.ts                 # Mongoose schemas (UserModel, WorkerModel, ComplaintModel, NotificationModel)
+    ├── data/
+    │   ├── mockData.ts               # Initial seed users, workers, multi-ward complaints, notifications
+    │   └── translations.ts           # 6-language localization dictionary (en, ta, tanglish, hi, te, kn)
+    ├── utils/
+    │   └── routeOptimizer.ts         # Haversine formula, Nearest Neighbor + 2-Opt TSP solver, Maps URL builder
+    └── components/
+        ├── Navbar.tsx                # Role switcher (Citizen / Worker / Admin), language selector, notifications, auth
+        ├── AuthModal.tsx             # Sign-in, registration, and profile/avatar management
+        ├── NotificationDrawer.tsx    # Real-time user notification drawer
+        ├── CitizenPortal.tsx         # Complaint reporting, live GPS, Gemini AI scanner, feed, 5-star feedback
+        ├── DumpsterQRModal.tsx       # Physical dumpster QR scanner simulator & custom PNG QR sticker generator
+        ├── WorkerPortal.tsx          # Field task roster, live distance, before/after upload, GPS stamping
+        ├── RouteOptimizerView.tsx    # Interactive TSP 2-Opt dashboard, topological sequence diagram, Maps launcher
+        └── AdminPortal.tsx           # Executive KPIs, Recharts visualizations, ticket search/filter, worker dispatch
 ```
 
-### Detailed Breakdown of Each Step:
+---
 
-### Step 1: Citizen Waste Reporting & Automated Diagnostic
-1. The citizen opens the **Citizen Portal**.
-2. **Physical Dumpster QR Code Auto-Fill (Optional Shortcut):**
-   - In addition to manual entry, citizens standing near physical municipal bins can click **"Scan Dumpster QR"**.
-   - Scanning the bin's physical QR sticker instantly decodes the registered Bin ID (e.g. `BIN-W12-04`), Ward, exact street address, and high-precision GPS coordinates, pre-populating the complaint form automatically.
-   - Citizens and ward authorities can also access the built-in **"QR Tag Generator"** to produce, preview, and download official high-resolution printable QR stickers for physical dumpsters across wards.
-3. **GPS Geolocation Pinpoint:** Clicking *"Live GPS"* activates `navigator.geolocation.getCurrentPosition()`, capturing exact latitude, longitude, and accuracy in meters.
-4. **Photo Upload & Multimodal AI Inspection:**
-   - The user selects or captures a photo of the waste accumulation.
-   - The photo is transmitted via `/api/ai-analyze-waste`.
-   - The AI inspects the pixels and returns:
-     - **Detected Material:** (e.g., Plastic & Recyclable, Organic, Hazardous, Construction).
-     - **Hazard Level:** (Safe, Moderate, Hazardous, Critical).
-     - **Confidence Score:** (e.g., 96%).
-     - **Recyclable Percentage:** (e.g., 78%).
-     - **Estimated Volume:** (e.g., $0.85\text{ m}^3$).
-     - **Carbon Offset Potential:** (e.g., $5.2\text{ kg CO}_2$).
-     - **Recommended Municipal Equipment:** (e.g., Hydraulic Compactor Truck + Puncture-Proof Nitrile Gloves).
-5. The citizen submits the ticket. A unique ticket number (e.g., `TKT-8291`) is generated, and the ticket enters the public municipal feed with `pending` status.
+## 4. Core Innovative Techniques & Algorithms
 
-### Step 2: Municipal Command Center Monitoring & Dispatch
-1. The municipal supervisor opens the **Admin Command Center**.
-2. **Executive KPI Dashboard:**
-   - Total complaints, pending tasks, active workforce, and average resolution time (hours).
-   - Waste composition breakdown (Recyclables vs. Organic vs. Debris).
-   - Ward-by-ward complaint volume and resolution success rates.
-3. **Filter & Search:** Admins can filter tickets by Ward, Status, or search by Ticket ID/Citizen Name.
-4. **Worker Dispatch:**
-   - Admin opens the *"Assign Field Worker"* dialog.
-   - Selects an active sanitation worker designated for that ward.
-   - Submits assignment; the ticket status transitions to `assigned`.
+### Technique 1: Physical Dumpster QR Tagging & PNG Sticker Generator (`DumpsterQRModal.tsx`)
+- **Dual-Mode Operational System:**
+  1. **Scan Mode (`Scan Dumpster QR`):** Citizens standing at municipal bins scan (or select from registered ward dumpsters like `BIN-W12-04`, `BIN-W08-02`, `BIN-W04-07`, `BIN-W02-09`) to decode structured JSON payloads containing `binId`, `ward`, `address`, `lat`, `lng`, `capacityLitres`, and `dumpsterType`.
+  2. **Auto-Fill Pipeline:** Scanning automatically opens the complaint form, pre-populates the exact address, selects the municipal ward, locks GPS coordinates (`accuracy: 2m`), tags the waste type as `Overflowing Public Dumpster`, and displays a verified badge (`Physical Dumpster Tag Linked: BIN-...`).
+  3. **Generator Mode (`QR Tag Generator`):** Ward administrators can customize a Bin ID, Ward, Address, Latitude/Longitude, Capacity (Litres), and Dumpster Type to render a municipal-branded QR sticker (Error Correction Level `H`) and download it directly as a print-ready `.png` file (`Download PNG`) or test it immediately (`Test Auto-Fill`).
 
-### Step 3: Sanitation Worker Field Operations & Route Optimization
-1. The worker logs in to the **Worker Portal**.
-2. **AI Multi-Stop Route Optimization Engine (TSP + 2-Opt):**
-   - When a sanitation worker has multiple pending complaint sites in their assigned ward, they can toggle the **"AI Route Optimizer"**.
-   - **Algorithmic Formulation:** The system formulates a Traveling Salesperson Problem (TSP) starting from the worker's live GPS coordinates (or ward depot).
-   - **Pairwise Distance Matrix:** Computes great-circle distances using the Haversine spherical formula between all waypoint pairs.
-   - **Heuristic Sequencing & 2-Opt Local Search:** First constructs a greedy Nearest-Neighbor tour, then runs iterative **2-Opt edge swaps** to untangle crossing paths and converge on the minimal travel distance.
-   - **Urgency & Hazard Weighting:** Workers can optionally select *"Urgency & Hazard Priority"*, which factors in complaint severity (Critical hazards weighted to reduce detour risk while cleaning toxic or dangerous spills first).
-   - **Transit & Fuel Telemetry:** Displays total driving kilometers, estimated transit time, cleanup time per site, percentage distance saved, and municipal diesel $\text{CO}_2$ emissions avoided.
-   - **Integrated Multi-Stop Navigation:** Generates a Google Maps Multi-Stop link pre-sequencing the origin, intermediate waypoints, and final destination for turn-by-turn driving guidance.
-3. **Live Field Proximity & Single-Stop Telemetry:**
-   - The system displays the real-time distance and estimated transit time to each specific complaint.
-4. **Direct Citizen Contact:** 1-click phone dialer allows the worker to call the reporting citizen for physical landmark guidance.
-5. **Execution & Proof Submission:**
-   - The worker marks the task as `in_progress`.
-   - After cleaning the dump site, the worker uploads the **After-Cleanup Proof Photo**.
-   - Clicks *"Stamp GPS Location"* to generate an unalterable proof log containing coordinates and timestamps.
-   - Submits resolution; status transitions to `completed`.
+### Technique 2: Multimodal AI Waste Vision & Hazard Diagnostics (`server.ts` $\rightarrow$ `/api/ai-analyze-waste`)
+- Accepts base64-encoded waste photographs from the Citizen Portal.
+- Sends image + structured engineering prompt to **Google Gemini (`gemini-3.8-flash`)** to extract:
+  - `detectedType` (Plastic & Recyclable, Bio-degradable / Organic, E-Waste / Electronics, Hazardous & Medical, Construction & Heavy, Overflowing Public Dumpster, General Mixed Solid Waste)
+  - `severity` (`Low`, `Medium`, `High`, `Critical`) & `hazardLevel` (`Safe`, `Moderate`, `Hazardous`, `Critical`)
+  - `confidence` (%), `recyclablePercentage` (%), `estimatedVolume` (e.g., `0.85 m³`), `carbonOffsetKg` (kg $\text{CO}_2$ saved via recycling/diversion)
+  - `recommendedEquipment` (e.g., *Hydraulic Compactor Truck + Puncture-Proof Nitrile Gloves*)
+  - `estimatedFillPercent`, `recommendedPriority`, and `aiAnalysisNotes`
+- Includes a **Calibrated Optical Diagnostic Fallback** so demonstrations and offline scenarios always return valid structured diagnostics without failing.
 
-### Step 4: Public Transparency & Citizen Feedback
-1. The ticket updates instantly on the citizen's public feed.
-2. The citizen inspects the **Before Photo** alongside the **Cleaned Photo**.
-3. The citizen submits a 1-to-5 Star review with qualitative comments on sanitation thoroughness.
-4. Ratings directly update the worker's municipal performance score in the Admin dashboard.
+### Technique 3: TSP + 2-Opt Multi-Stop Field Route Optimization (`src/utils/routeOptimizer.ts` & `RouteOptimizerView.tsx`)
+When a sanitation worker has multiple unresolved waste sites in their ward, the Worker Portal computes the optimal multi-stop visit sequence:
+
+1. **Great-Circle Spatial Distance Matrix (Haversine Formula):**
+   $$\Delta\sigma = 2 \arcsin \sqrt{\sin^2\left(\frac{\Delta\phi}{2}\right) + \cos\phi_1 \cos\phi_2 \sin^2\left(\frac{\Delta\lambda}{2}\right)}, \quad d = R \cdot \Delta\sigma \quad (R = 6371\text{ km})$$
+2. **Phase A — Greedy Nearest-Neighbor Initialization:**
+   - Starts from the worker's live GPS coordinate (`navigator.geolocation`) or municipal ward depot fallback (`18.5204, 73.8567`).
+   - Supports two selectable optimization strategies:
+     - **Shortest Distance (`tsp_2opt`):** Pure spatial distance minimization.
+     - **Urgency & Hazard Priority (`urgency_priority`):** Applies severity weighting multipliers (`Critical = 0.35`, `High = 0.65`, `Medium = 0.88`, `Low = 1.0`) so bio-hazardous or critical overflows are prioritized while avoiding extreme detours.
+3. **Phase B — 2-Opt Local Search Refinement:**
+   - Iteratively tests edge swaps $(i, j)$ along the tour (up to 50 passes). Whenever reversing a sub-segment reduces total tour distance ($d_{new} < d_{old} - 0.001\text{ km}$), the crossing path is untangled—converging on a near-optimal TSP tour in $O(n^2)$ milliseconds.
+4. **Operational Telemetry & Multi-Stop Navigation:**
+   - Estimates per-leg driving time (urban municipal average ~24 km/h + intersection buffer) and per-site cleanup time (10–40 mins based on severity & heavy/dumpster waste type).
+   - Computes **Distance Saved (km & %)** vs. naive unoptimized order and **Avoided Diesel $\text{CO}_2$ Emissions** (`distSaved * 0.28 kg CO₂/km`).
+   - Renders a horizontal **Topological Route Sequence Diagram** and builds a 1-click **Multi-Stop Google Maps Directions URL** (`origin`, `waypoints`, `destination`).
+
+### Technique 4: Closed-Loop Photographic Verification & Accountability (`WorkerPortal.tsx` & `CitizenPortal.tsx`)
+- **Side-by-Side Visual Audit:** Citizens and admins see the original **Reported Photo** next to the worker's **Cleaned Photo (Proof)**.
+- **On-Site GPS Timestamping:** Workers click **"Stamp GPS Location"** in the resolution modal to inject immutable device coordinates and local timestamp into the resolution log.
+- **5-Step Municipal Pipeline Tracker:** Visually tracks `pending` $\rightarrow$ `assigned` $\rightarrow$ `in_progress` $\rightarrow$ `completed` $\rightarrow$ `verified`.
+- **Citizen Rating Loop:** Once `completed` or `verified`, citizens submit a **1–5 Star Rating & Comment**, updating worker ratings across the system.
+
+### Technique 5: Dual-Persistence Cloud Store (`server.ts` & `src/db/models.ts`)
+- At startup, `connectToMongoDB()` checks `process.env.MONGODB_URI`.
+- If configured, Mongoose connects to **MongoDB Atlas** and auto-seeds initial collections (`UserModel`, `WorkerModel`, `ComplaintModel`, `NotificationModel`) when empty.
+- Every read/write syncs seamlessly with MongoDB **and** an active in-memory cloud store (`usersStore`, `workersStore`, `complaintsStore`, `notificationsStore`), ensuring zero downtime if MongoDB credentials are absent or network connectivity drops.
 
 ---
 
-## 5. REST API Architecture
+## 5. Complete End-to-End Working Process
 
-| Method | Endpoint | Description |
+```text
+[1. AUTH & SESSION]
+    └─► User signs in/registers via AuthModal (/api/auth/login or /api/auth/register)
+    └─► Stored in localStorage & rehydrated on reload via GET /api/auth/me
+
+[2. CITIZEN REPORTING (CitizenPortal + DumpsterQRModal)]
+    ├─► Option A: Scan Dumpster QR -> Auto-fills Bin ID, Ward, Address, GPS
+    ├─► Option B: Click "Live GPS" -> Browser Geolocation API locks lat/lng & accuracy
+    ├─► Upload Photo -> POST /api/ai-analyze-waste -> Gemini returns material, hazard, volume, CO2, PPE
+    └─► Submit -> POST /api/complaints -> Ticket created (Status: "pending") + Admin notified
+
+[3. ADMIN COMMAND & DISPATCH (AdminPortal)]
+    ├─► Views Analytics Tab: KPIs + Recharts Waste Pie Chart & Ward Bar Chart
+    ├─► Views Complaints Tab: Searches/filters by Ward & Status -> Assigns Worker
+    └─► POST /api/complaints/:id/assign -> Status becomes "assigned" + Worker/Citizen notified
+
+[4. WORKER ROUTE OPTIMIZATION & CLEANUP (WorkerPortal + RouteOptimizerView)]
+    ├─► Views "Multi-Stop Route Optimizer (TSP 2-Opt)" across "My Tasks" or "All Ward Tasks"
+    ├─► Selects "Shortest Distance" or "Urgency & Hazard Priority"
+    ├─► Inspects Topological Sequence & launches 1-click Google Maps Multi-Stop Directions
+    ├─► Clicks "Execute Cleanup" / "Update Job" -> Sets "in_progress" or "completed"
+    └─► Uploads After-Cleanup Photo + Clicks "Stamp GPS Location" -> PUT /api/complaints/:id/status
+
+[5. CITIZEN VERIFICATION & FEEDBACK]
+    ├─► Citizen compares Reported Photo vs. Cleaned Proof Photo + Worker GPS Notes
+    └─► Submits 1-5 Star Review -> POST /api/complaints/:id/feedback
+```
+
+---
+
+## 6. REST API Architecture (`server.ts`)
+
+| Method | Endpoint | Purpose |
 | :--- | :--- | :--- |
-| `GET` | `/api/health` | System health check, database status, and uptime. |
-| `POST` | `/api/auth/login` | Role-based authentication (Citizen, Worker, Admin). |
-| `GET` | `/api/auth/me` | Rehydrates user session across browser refreshes. |
-| `GET` | `/api/complaints` | Retrieves complaint list with optional status/ward filtering. |
-| `POST` | `/api/complaints` | Submits new geotagged complaint with AI vision metadata. |
-| `PATCH`| `/api/complaints/:id/status` | Updates workflow state (assigned, in_progress, completed). |
-| `PATCH`| `/api/complaints/:id/assign` | Assigns designated worker to complaint. |
-| `POST` | `/api/complaints/:id/feedback` | Records citizen star rating and evaluation review. |
-| `POST` | `/api/complaints/:id/upvote` | Increments community upvote count on public issues. |
-| `GET` | `/api/workers` | Lists sanitation workforce directory and status. |
-| `POST` | `/api/workers` | Adds new municipal worker with assigned vehicle & ward. |
-| `GET` | `/api/analytics` | Returns aggregated metrics, charts data, and turnaround times. |
-| `POST` | `/api/ai-analyze-waste` | Multimodal AI computer vision image diagnostic. |
-| `GET` | `/api/notifications` | User-specific municipal status alerts. |
+| `GET` | `/api/health` | Returns server status, uptime, active database mode (MongoDB Atlas or In-Memory), and AI availability. |
+| `POST` | `/api/auth/login` | Authenticates user by email/password or role shortcut. |
+| `POST` | `/api/auth/register` | Registers a new Citizen, Worker, or Admin (auto-creates `WorkerProfile` if role is `worker`). |
+| `GET` | `/api/auth/me` | Rehydrates active user session by `email` or `userId` on page refresh. |
+| `GET` | `/api/complaints` | Fetches complaints with optional `citizenId`, `workerId`, `ward`, or `status` filters. |
+| `POST` | `/api/complaints` | Creates a new geotagged complaint (`WM-YYYY-XXXX`), saves AI metadata, and triggers notifications. |
+| `POST` | `/api/complaints/:id/assign` | Assigns a worker to a complaint (`status: 'assigned'`) and notifies both worker and citizen. |
+| `PUT` | `/api/complaints/:id/status` | Updates complaint status (`in_progress`, `completed`, `verified`), saves `cleanedImageUrl` & `workerNotes`, and updates worker resolved counts. |
+| `POST` | `/api/complaints/:id/feedback` | Saves 1–5 star `feedbackRating` and `feedbackComment`, and notifies the assigned worker. |
+| `GET` | `/api/workers` | Lists all municipal field workers with ward, vehicle, status, and ratings. |
+| `POST` | `/api/workers` | Registers a new municipal worker and creates matching login user credentials. |
+| `GET` | `/api/analytics` | Aggregates dashboard totals, resolution turnaround time, waste distribution %, and ward resolution counts. |
+| `POST` | `/api/ai-analyze-waste` | Sends uploaded waste photo to Gemini 3.8 Flash for structured optical classification & hazard diagnostics. |
+| `GET` | `/api/notifications` | Retrieves notifications (optionally filtered by `userId`). |
 
 ---
 
-## 6. Key Innovations for Project Review & Viva Defense
+## 7. Cloud Build & Render Production Deployment Process
 
-1. **Closed-Loop Resolution Guarantee:**
-   No complaint can be closed without verified photographic evidence and on-site geotag timestamps, eliminating administrative "paper resolutions."
-2. **Automated Environmental Intelligence:**
-   Instead of basic image storage, the system calculates carbon offset potential and material recyclability yield, aligning municipal sanitation with circular economy goals.
-3. **Resilient Dual-Persistence Design:**
-   Designed to never fail during evaluation demonstrations: if MongoDB Atlas credentials are not supplied or network connectivity drops, the system seamlessly operates via high-speed cloud memory caching.
-4. **Human-Centric Municipal Field Workflow:**
-   Sanitation workers are equipped with distance indicators, required PPE alerts, and 1-click citizen communication rather than opaque bureaucratic tasks.
+The application is deployed continuously via GitHub to Render at **`https://smart-waste-monitoring.onrender.com`**.
+
+### Production Build Pipeline (`package.json`)
+1. **Build Command (`npm run build`):**
+   - `vite build`: Compiles the React 19 + TypeScript + Tailwind CSS frontend into optimized static assets inside `dist/`.
+   - `esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs`: Bundles the Express TypeScript backend into a standalone production CommonJS server (`dist/server.cjs`).
+2. **Start Command (`npm start`):**
+   - Executes `node dist/server.cjs`.
+   - In production (`NODE_ENV === "production"`), `server.ts` serves the compiled static frontend from `dist/` and handles SPA fallback routing (`app.get("*")`).
+3. **Dynamic Port Binding (`server.ts`):**
+   - Binds to `const PORT = Number(process.env.PORT) || 3000;` on `0.0.0.0`, ensuring compatibility with Render's dynamic port injection (e.g., `10000`) as well as local development (`3000`).
+
+### Render Environment Configuration
+- **GitHub Repository:** `Manimaranpro/smart-waste-cloud` (branch: `main`)
+- **Build Command:** `npm install && npm run build`
+- **Start Command:** `npm start`
+- **Environment Variables:**
+  - `NODE_ENV`: `production`
+  - `GEMINI_API_KEY`: Google Gemini API key for live optical waste classification
+  - `MONGODB_URI`: *(Optional)* MongoDB Atlas URI for persistent cloud collections (falls back gracefully to in-memory cloud store if omitted)
+
+### Git-to-Render Deployment Workflow
+1. Local changes are committed and pushed to GitHub (`git push -u origin main`).
+2. Render detects the commit on `Manimaranpro/smart-waste-cloud` (or via Dashboard **Manual Deploy**).
+3. Render installs dependencies, runs `vite build` + `esbuild`, starts `node dist/server.cjs`, passes health checks, and serves the live app at `https://smart-waste-monitoring.onrender.com`.
+
+---
+
+## 8. Key Talking Points for Presentation & Viva Defense
+
+1. **"Passive Grievance App vs. Active Operations Engine":** Unlike existing portals that only store a photo and text address, EcoTrack automates location capture (Dumpster QR), waste intelligence (Gemini AI), route optimization (TSP 2-Opt), and cleanup verification (Before/After + GPS stamp).
+2. **Algorithmic Rigor (`O(n^2)` 2-Opt TSP):** Exact TSP is $O(n!)$ and too slow for mobile field dispatch. Combining Greedy Nearest Neighbor with iterative 2-Opt edge swaps untangles crossing routes in milliseconds with near-optimal fuel savings.
+3. **Zero-Downtime Viva Resilience:** Calibrated Gemini optical fallback + MongoDB dual in-memory persistence guarantee the live cloud demo works reliably under any network or database condition.
